@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Settings, Check, X, Plus, Trash2, CreditCard as Edit3, ChevronLeft, ChevronRight, List, Focus } from 'lucide-react';
+import { Play, Pause, RotateCcw, Settings, Check, X, Plus, Trash2, CreditCard as Edit3, ChevronLeft, ChevronRight, List, Focus, Square } from 'lucide-react';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -35,6 +35,8 @@ interface Task {
   duration: number; // in minutes
   completed: boolean;
   sessions: number;
+  weightage: 'low' | 'medium' | 'high' | 'critical';
+  tags: string[];
 }
 
 function App() {
@@ -77,6 +79,8 @@ function App() {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskDuration, setTaskDuration] = useState(25);
+  const [taskWeightage, setTaskWeightage] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
+  const [taskTags, setTaskTags] = useState('');
 
   const currentTask = tasks[currentTaskIndex] || null;
   const nextTask = tasks[currentTaskIndex + 1] || null;
@@ -133,10 +137,17 @@ function App() {
 
   // Initialize timer when current task changes or when not active
   useEffect(() => {
-    if (!isActive && currentTask && !isBreak) {
+    if (currentTask && !isBreak && timeLeft === 0) {
       setTimeLeft(currentTask.duration * 60);
     }
-  }, [currentTask, isActive, isBreak]);
+  }, [currentTask, isBreak, timeLeft]);
+
+  // Update timer when current task duration changes
+  useEffect(() => {
+    if (currentTask && !isBreak && !isActive) {
+      setTimeLeft(currentTask.duration * 60);
+    }
+  }, [currentTask?.duration, isBreak, isActive]);
 
   // Save to localStorage
   useEffect(() => {
@@ -282,13 +293,17 @@ function App() {
   const addTask = () => {
     if (!taskTitle.trim()) return;
     
+    const tagsArray = taskTags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+    
     const newTask: Task = {
       id: Date.now().toString(),
       title: taskTitle.trim(),
       description: taskDescription.trim() || undefined,
       duration: taskDuration,
       completed: false,
-      sessions: 0
+      sessions: 0,
+      weightage: taskWeightage,
+      tags: tagsArray
     };
 
     setTasks(prev => [...prev, newTask]);
@@ -304,13 +319,17 @@ function App() {
   const updateTask = () => {
     if (!editingTask || !taskTitle.trim()) return;
     
+    const tagsArray = taskTags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+    
     setTasks(prev => prev.map(task => 
       task.id === editingTask.id 
         ? { 
             ...task, 
             title: taskTitle.trim(),
             description: taskDescription.trim() || undefined,
-            duration: taskDuration
+            duration: taskDuration,
+            weightage: taskWeightage,
+            tags: tagsArray
           }
         : task
     ));
@@ -338,6 +357,8 @@ function App() {
       setTaskTitle(task.title);
       setTaskDescription(task.description || '');
       setTaskDuration(task.duration);
+      setTaskWeightage(task.weightage);
+      setTaskTags(task.tags.join(', '));
     } else {
       resetForm();
     }
@@ -349,7 +370,19 @@ function App() {
     setTaskTitle('');
     setTaskDescription('');
     setTaskDuration(25);
+    setTaskWeightage('medium');
+    setTaskTags('');
     setShowTaskForm(false);
+  };
+
+  const getWeightageColor = (weightage: string) => {
+    switch (weightage) {
+      case 'low': return 'bg-green-500/20 text-green-300 border-green-400/30';
+      case 'medium': return 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30';
+      case 'high': return 'bg-orange-500/20 text-orange-300 border-orange-400/30';
+      case 'critical': return 'bg-red-500/20 text-red-300 border-red-400/30';
+      default: return 'bg-gray-500/20 text-gray-300 border-gray-400/30';
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -395,155 +428,173 @@ function App() {
       {/* Main Content */}
       <div className="relative z-10 min-h-screen flex flex-col justify-center p-3 sm:p-4">
         <div className="text-center max-w-md mx-auto w-full">
-          {/* Session Status */}
-          <div className="mb-3 sm:mb-4">
-            <div className={`inline-flex px-3 py-1.5 sm:px-4 sm:py-2 rounded-full backdrop-blur-xl border transition-all duration-500 text-xs sm:text-sm ${
-              isBreak 
-                ? 'bg-orange-500/20 border-orange-400/30 text-orange-300' 
-                : 'bg-blue-500/20 border-blue-400/30 text-blue-300'
-            }`}>
-              {isBreak ? `${breakType === 'short' ? 'Short' : 'Long'} Break` : 'Focus Session'}
-            </div>
-          </div>
+          {/* Show focus session UI only if there are tasks */}
+          {tasks.length > 0 ? (
+            <>
+              {/* Session Status */}
+              <div className="mb-3 sm:mb-4">
+                <div className={`inline-flex px-3 py-1.5 sm:px-4 sm:py-2 rounded-full backdrop-blur-xl border transition-all duration-500 text-xs sm:text-sm ${
+                  isBreak 
+                    ? 'bg-orange-500/20 border-orange-400/30 text-orange-300' 
+                    : 'bg-blue-500/20 border-blue-400/30 text-blue-300'
+                }`}>
+                  {isBreak ? `${breakType === 'short' ? 'Short' : 'Long'} Break` : 'Focus Session'}
+                </div>
+              </div>
 
-          {/* Current Task Info */}
-          {currentTask && !isBreak && (
-            <div className="mb-4 sm:mb-6">
-              <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 mb-3">
-                <div className="flex items-center justify-between mb-2 sm:mb-3">
-                  <button
-                    onClick={previousTaskHandler}
-                    disabled={currentTaskIndex === 0}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 border border-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 hover:text-white/80 transition-all duration-200 flex items-center justify-center"
-                  >
-                    <ChevronLeft size={12} className="sm:w-3.5 sm:h-3.5" />
-                  </button>
-                  
-                  <div className="flex-1 min-w-0 mx-2 sm:mx-3">
-                    <h1 className="text-base sm:text-lg font-medium text-white/90 mb-1 truncate">
-                      {currentTask.title}
-                    </h1>
-                    {currentTask.description && (
-                      <p className="text-white/60 text-xs sm:text-sm line-clamp-2 mb-1">{currentTask.description}</p>
-                    )}
-                    <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-white/60">
-                      <span>{currentTask.duration}min</span>
-                      <span>•</span>
-                      <span>{currentTask.sessions} sessions</span>
-                      <span>•</span>
-                      <span>{currentTaskIndex + 1}/{tasks.length}</span>
+              {/* Current Task Info */}
+              {currentTask && !isBreak && (
+                <div className="mb-4 sm:mb-6">
+                  <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 mb-3">
+                    <div className="flex items-center justify-between mb-2 sm:mb-3">
+                      <button
+                        onClick={previousTaskHandler}
+                        disabled={currentTaskIndex === 0}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 border border-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 hover:text-white/80 transition-all duration-200 flex items-center justify-center"
+                      >
+                        <ChevronLeft size={12} className="sm:w-3.5 sm:h-3.5" />
+                      </button>
+                      
+                      <div className="flex-1 min-w-0 mx-2 sm:mx-3">
+                        <h1 className="text-base sm:text-lg font-medium text-white/90 mb-1 truncate">
+                          {currentTask.title}
+                        </h1>
+                        {currentTask.description && (
+                          <p className="text-white/60 text-xs sm:text-sm line-clamp-2 mb-1">{currentTask.description}</p>
+                        )}
+                        <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-white/60 mb-2">
+                          <span>{currentTask.duration}min</span>
+                          <span>•</span>
+                          <span>{currentTask.sessions} sessions</span>
+                          <span>•</span>
+                          <span>{currentTaskIndex + 1}/{tasks.length}</span>
+                        </div>
+                        
+                        {/* Weightage and Tags */}
+                        <div className="flex flex-wrap items-center justify-center gap-1 mb-2">
+                          <span className={`px-2 py-1 rounded-full text-xs border backdrop-blur-xl ${getWeightageColor(currentTask.weightage)}`}>
+                            {currentTask.weightage}
+                          </span>
+                          {(currentTask.tags || []).map((tag, index) => (
+                            <span key={index} className="px-2 py-1 rounded-full text-xs bg-blue-500/20 text-blue-300 border border-blue-400/30 backdrop-blur-xl">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={nextTaskHandler}
+                        disabled={currentTaskIndex === tasks.length - 1}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 border border-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 hover:text-white/80 transition-all duration-200 flex items-center justify-center"
+                      >
+                        <ChevronRight size={12} className="sm:w-3.5 sm:h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-center space-x-2">
+                      <button
+                        onClick={() => openTaskForm(currentTask)}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 border border-white/20 text-white/60 hover:bg-white/20 hover:text-white/80 transition-all duration-200 flex items-center justify-center"
+                      >
+                        <Edit3 size={10} className="sm:w-3 sm:h-3" />
+                      </button>
+                      <button
+                        onClick={() => deleteTask(currentTask.id)}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-red-500/20 border border-red-400/40 text-red-400 hover:bg-red-500/30 hover:text-red-300 transition-all duration-200 flex items-center justify-center"
+                      >
+                        <Trash2 size={10} className="sm:w-3 sm:h-3" />
+                      </button>
                     </div>
                   </div>
-
-                  <button
-                    onClick={nextTaskHandler}
-                    disabled={currentTaskIndex === tasks.length - 1}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 border border-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 hover:text-white/80 transition-all duration-200 flex items-center justify-center"
-                  >
-                    <ChevronRight size={12} className="sm:w-3.5 sm:h-3.5" />
-                  </button>
                 </div>
-
-                <div className="flex items-center justify-center space-x-2">
-                  <button
-                    onClick={() => openTaskForm(currentTask)}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 border border-white/20 text-white/60 hover:bg-white/20 hover:text-white/80 transition-all duration-200 flex items-center justify-center"
-                  >
-                    <Edit3 size={10} className="sm:w-3 sm:h-3" />
-                  </button>
-                  <button
-                    onClick={() => deleteTask(currentTask.id)}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-red-500/20 border border-red-400/40 text-red-400 hover:bg-red-500/30 hover:text-red-300 transition-all duration-200 flex items-center justify-center"
-                  >
-                    <Trash2 size={10} className="sm:w-3 sm:h-3" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Break Message */}
-          {isBreak && (
-            <div className="mb-4 sm:mb-6">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-orange-500/20 border border-orange-400/30 flex items-center justify-center mb-3 sm:mb-4 mx-auto">
-                <Focus size={20} className="sm:w-6 sm:h-6 text-orange-300" />
-              </div>
-              <h1 className="text-lg sm:text-xl font-medium text-white/90 mb-1 sm:mb-2">Take a break</h1>
-              <p className="text-white/60 text-sm sm:text-base">You've completed a focus session. Time to recharge!</p>
-            </div>
-          )}
-
-          {/* Timer Display */}
-          <div className="mb-6 sm:mb-8">
-            <div className="text-4xl sm:text-5xl lg:text-6xl font-light text-white/95 mb-4 sm:mb-6 tracking-wider font-mono">
-              {formatTime(timeLeft)}
-            </div>
-            
-            {/* Progress Bar */}
-            <div className="relative w-full max-w-xs mx-auto h-1 bg-white/10 rounded-full overflow-hidden">
-              <div 
-                className={`absolute left-0 top-0 h-full rounded-full transition-all duration-1000 ease-out ${
-                  isBreak ? 'bg-orange-400 shadow-orange-400/50' : 'bg-blue-400 shadow-blue-400/50'
-                }`}
-                style={{ 
-                  width: `${progress}%`,
-                  boxShadow: `0 0 15px currentColor`
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="flex justify-center items-center space-x-3 sm:space-x-4 mb-4">
-            {!isActive ? (
-              <button
-                onClick={startTimer}
-                disabled={!currentTask && !isBreak}
-                className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500/20 border border-blue-400/40 text-blue-300 backdrop-blur-xl shadow-lg shadow-blue-500/20 transition-all duration-300 transform hover:scale-105 active:scale-95 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Play size={16} className="sm:w-5 sm:h-5 ml-0.5" />
-              </button>
-            ) : (
-              <button
-                onClick={toggleTimer}
-                className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-500/20 border border-orange-400/40 text-orange-300 backdrop-blur-xl shadow-lg shadow-orange-500/20 transition-all duration-300 transform hover:scale-105 active:scale-95 flex items-center justify-center"
-              >
-                <Pause size={16} className="sm:w-5 sm:h-5" />
-              </button>
-            )}
-            
-            <button
-              onClick={resetTimer}
-              disabled={timeLeft === 0 && !isActive}
-              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white/5 border border-white/10 text-white/60 backdrop-blur-xl shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 hover:bg-white/10 hover:text-white/80 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <RotateCcw size={16} className="sm:w-5 sm:h-5" />
-            </button>
-
-            {isActive && (
-              <button
-                onClick={stopSession}
-                className="px-3 py-2 sm:px-4 sm:py-2 rounded-full bg-red-500/20 border border-red-400/40 text-red-300 backdrop-blur-xl shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 hover:bg-red-500/30 text-xs sm:text-sm font-medium"
-              >
-                Stop
-              </button>
-            )}
-          </div>
-
-          {/* Next Task Preview */}
-          {nextTask && !isBreak && (
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-lg sm:rounded-xl p-3 sm:p-4">
-              <h3 className="text-white/70 text-xs font-medium mb-1">Next Task</h3>
-              <p className="text-white/90 font-medium text-sm">{nextTask.title}</p>
-              {nextTask.description && (
-                <p className="text-white/60 text-xs mt-1 line-clamp-1">{nextTask.description}</p>
               )}
-              <p className="text-white/60 text-xs mt-1">{nextTask.duration} minutes</p>
-            </div>
-          )}
 
-          {/* No Tasks Message */}
-          {tasks.length === 0 && (
+              {/* Break Message */}
+              {isBreak && (
+                <div className="mb-4 sm:mb-6">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-orange-500/20 border border-orange-400/30 flex items-center justify-center mb-3 sm:mb-4 mx-auto">
+                    <Focus size={20} className="sm:w-6 sm:h-6 text-orange-300" />
+                  </div>
+                  <h1 className="text-lg sm:text-xl font-medium text-white/90 mb-1 sm:mb-2">Take a break</h1>
+                  <p className="text-white/60 text-sm sm:text-base">You've completed a focus session. Time to recharge!</p>
+                </div>
+              )}
+
+              {/* Timer Display */}
+              <div className="mb-6 sm:mb-8">
+                <div className="text-4xl sm:text-5xl lg:text-6xl font-light text-white/95 mb-4 sm:mb-6 tracking-wider font-mono">
+                  {formatTime(timeLeft)}
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="relative w-full max-w-xs mx-auto h-1 bg-white/10 rounded-full overflow-hidden">
+                  <div 
+                    className={`absolute left-0 top-0 h-full rounded-full transition-all duration-1000 ease-out ${
+                      isBreak ? 'bg-orange-400 shadow-orange-400/50' : 'bg-blue-400 shadow-blue-400/50'
+                    }`}
+                    style={{ 
+                      width: `${progress}%`,
+                      boxShadow: `0 0 15px currentColor`
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex justify-center items-center space-x-3 sm:space-x-4 mb-4">
+                {!isActive ? (
+                  <button
+                    onClick={startTimer}
+                    disabled={!currentTask && !isBreak}
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-500/20 border border-blue-400/40 text-blue-300 backdrop-blur-xl shadow-lg shadow-blue-500/20 transition-all duration-300 transform hover:scale-105 active:scale-95 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Play size={16} className="sm:w-5 sm:h-5 ml-0.5" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={toggleTimer}
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-orange-500/20 border border-orange-400/40 text-orange-300 backdrop-blur-xl shadow-lg shadow-orange-500/20 transition-all duration-300 transform hover:scale-105 active:scale-95 flex items-center justify-center"
+                  >
+                    <Pause size={16} className="sm:w-5 sm:h-5" />
+                  </button>
+                )}
+                
+                <button
+                  onClick={resetTimer}
+                  disabled={timeLeft === 0 && !isActive}
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white/5 border border-white/10 text-white/60 backdrop-blur-xl shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 hover:bg-white/10 hover:text-white/80 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw size={16} className="sm:w-5 sm:h-5" />
+                </button>
+
+                {isActive && (
+                  <button
+                    onClick={stopSession}
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-red-500/20 border border-red-400/40 text-red-300 backdrop-blur-xl shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 hover:bg-red-500/30 flex items-center justify-center"
+                  >
+                    <Square size={16} className="sm:w-5 sm:h-5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Next Task Preview */}
+              {nextTask && !isBreak && (
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white/60 text-xs mb-1">Next</p>
+                      <p className="text-white/90 font-medium text-sm truncate">{nextTask.title}</p>
+                    </div>
+                    <div className="text-white/60 text-xs ml-2">
+                      {nextTask.duration}min
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* No Tasks Message */
             <div>
               <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4 sm:mb-6 mx-auto">
                 <Plus size={20} className="sm:w-6 sm:h-6 text-white/40" />
@@ -567,20 +618,27 @@ function App() {
           <div className="bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-sm w-full shadow-2xl max-h-[80vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-4 sm:mb-6">
               <h2 className="text-lg font-medium text-white/90">All Tasks</h2>
-              <button
-                onClick={() => setShowTaskList(false)}
-                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 text-white/60 hover:bg-white/20 hover:text-white/80 transition-all duration-200 flex items-center justify-center"
-              >
-                <X size={14} />
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => openTaskForm()}
+                  className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-400/40 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 transition-all duration-200 flex items-center justify-center"
+                >
+                  <Plus size={14} />
+                </button>
+                <button
+                  onClick={() => setShowTaskList(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 border border-white/20 text-white/60 hover:bg-white/20 hover:text-white/80 transition-all duration-200 flex items-center justify-center"
+                >
+                  <X size={14} />
+                </button>
+              </div>
             </div>
             
             <div className="flex-1 overflow-y-auto space-y-2 sm:space-y-3">
               {tasks.map((task, index) => (
                 <div
                   key={task.id}
-                  onClick={() => selectTask(index)}
-                  className={`p-3 sm:p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
+                  className={`p-3 sm:p-4 rounded-lg border transition-all duration-200 ${
                     index === currentTaskIndex
                       ? 'bg-blue-500/20 border-blue-400/40 text-blue-300'
                       : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10'
@@ -588,16 +646,55 @@ function App() {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="font-medium text-sm truncate flex-1">{task.title}</h3>
-                    <span className="text-xs opacity-70 ml-2">{task.duration}min</span>
+                    <div className="flex items-center space-x-1 ml-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openTaskForm(task);
+                        }}
+                        className="w-6 h-6 rounded-full bg-white/10 border border-white/20 text-white/60 hover:bg-white/20 hover:text-white/80 transition-all duration-200 flex items-center justify-center"
+                      >
+                        <Edit3 size={10} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteTask(task.id);
+                        }}
+                        className="w-6 h-6 rounded-full bg-red-500/20 border border-red-400/40 text-red-400 hover:bg-red-500/30 hover:text-red-300 transition-all duration-200 flex items-center justify-center"
+                      >
+                        <Trash2 size={10} />
+                      </button>
+                      <span className="text-xs opacity-70 ml-1">{task.duration}min</span>
+                    </div>
                   </div>
                   {task.description && (
                     <p className="text-xs opacity-70 line-clamp-2 mb-1">{task.description}</p>
                   )}
+                  
+                  {/* Weightage and Tags in Task List */}
+                  <div className="flex flex-wrap items-center gap-1 mb-2">
+                    <span className={`px-2 py-1 rounded-full text-xs border backdrop-blur-xl ${getWeightageColor(task.weightage)}`}>
+                      {task.weightage}
+                    </span>
+                    {(task.tags || []).slice(0, 2).map((tag, tagIndex) => (
+                      <span key={tagIndex} className="px-2 py-1 rounded-full text-xs bg-blue-500/20 text-blue-300 border border-blue-400/30 backdrop-blur-xl">
+                        {tag}
+                      </span>
+                    ))}
+                    {(task.tags || []).length > 2 && (
+                      <span className="text-xs opacity-60">+{(task.tags || []).length - 2}</span>
+                    )}
+                  </div>
+                  
                   <div className="flex items-center justify-between text-xs opacity-60">
                     <span>{task.sessions} sessions</span>
-                    {index === currentTaskIndex && (
-                      <span className="text-blue-300">Current</span>
-                    )}
+                    <button
+                      onClick={() => selectTask(index)}
+                      className="px-2 py-1 rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 transition-all duration-200"
+                    >
+                      {index === currentTaskIndex ? 'Current' : 'Select'}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -667,6 +764,35 @@ function App() {
                     +
                   </button>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-1 sm:mb-2">
+                  Priority Level
+                </label>
+                <select
+                  value={taskWeightage}
+                  onChange={(e) => setTaskWeightage(e.target.value as 'low' | 'medium' | 'high' | 'critical')}
+                  className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-white/90 backdrop-blur-xl focus:outline-none focus:border-white/40 transition-all duration-200 text-sm"
+                >
+                  <option value="low" className="bg-gray-800 text-white">Low Priority</option>
+                  <option value="medium" className="bg-gray-800 text-white">Medium Priority</option>
+                  <option value="high" className="bg-gray-800 text-white">High Priority</option>
+                  <option value="critical" className="bg-gray-800 text-white">Critical</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-1 sm:mb-2">
+                  Tags (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={taskTags}
+                  onChange={(e) => setTaskTags(e.target.value)}
+                  placeholder="work, urgent, meeting..."
+                  className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-white/90 backdrop-blur-xl focus:outline-none focus:border-white/40 transition-all duration-200 text-sm"
+                />
               </div>
             </div>
 
